@@ -132,13 +132,16 @@ def get_stock_data(ticker_symbol: str) -> tuple[pd.DataFrame, dict]:
         print(f"获取数据失败: {e}")
         return pd.DataFrame(), {}
 
-def get_stock_news(ticker_symbol: str, model_name: str) -> str:
+def get_stock_news(ticker_symbol: str, model_name: str, llm_config: dict) -> str:
     """【智能修改】获取指定股票今天和昨天的财经新闻，并多次调用大模型逐条评估媒体可信度与内容相关性"""
     print(f"【4/6】正在获取 {ticker_symbol} 近两日财经新闻并利用大模型智能筛选可信度...")
     
-    api_key = os.environ.get("LLM_API_KEY", "sk-fcfe4031faa24647a5b822158c748411")
-    base_url = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com")
+    api_key = llm_config.get("llm_api_key")
+    base_url = llm_config.get("llm_base_url", "https://api.deepseek.com")
     
+    if not api_key:
+        return "未配置 LLM API Key，跳过新闻筛选。"
+
     try:
         session = requests.Session()
         session.headers.update({
@@ -286,14 +289,14 @@ def predict_trend(df: pd.DataFrame) -> dict:
         "predicted_prices": future_preds,
     }
 
-def generate_report(ticker: str, metrics: dict, latest_data: dict, prediction: dict, reflection_context: str, model_name: str, news_context: str) -> str:
+def generate_report(ticker: str, metrics: dict, latest_data: dict, prediction: dict, reflection_context: str, model_name: str, news_context: str, llm_config: dict) -> str:
     """【修复Bug + 风格通俗化】调用大模型 API，结合量化指标与筛选后的新闻，生成通俗的大白话分析报告"""
     print("【5/6】唤醒大模型大脑，整合数据与筛选后的新闻撰写大白话投资分析报告...")
 
-    api_key = os.environ.get("LLM_API_KEY", "sk-fcfe4031faa24647a5b822158c748411")
-    base_url = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com")
+    api_key = llm_config.get("llm_api_key")
+    base_url = llm_config.get("llm_base_url", "https://api.deepseek.com")
 
-    if api_key == "你的_API_KEY_或者_转发服务_KEY" or not api_key:
+    if not api_key:
         return "【系统错误提示】未检测到有效的大模型 API Key。"
 
     client = OpenAI(api_key=api_key, base_url=base_url)
@@ -351,14 +354,19 @@ def generate_report(ticker: str, metrics: dict, latest_data: dict, prediction: d
     except Exception as e:
         return f"调用大模型失败，错误详情: {e}"
 
-def send_notification(stock_code: str, report_content: str) -> bool:
+def send_notification(stock_code: str, report_content: str, tg_config: dict) -> bool:
     """
     将分析报告推送到 Telegram 机器人
     """
-    bot_token = os.environ.get("TG_BOT_TOKEN", "8807275374:AAE4F1PiaYfxcmKhv0z_yvWmtRN5bbhi8l0")
-    chat_id = os.environ.get("TG_CHAT_ID", "5657208214")
+    if not tg_config:
+        print("【提示】未配置 Telegram 信息，跳过自动推送。")
+        return False
+
+    bot_token = tg_config.get("bot_token")
+    chat_id = tg_config.get("chat_id")
+    proxy_url = tg_config.get("proxy")
     
-    if bot_token == "你的_TELEGRAM_BOT_TOKEN" or chat_id == "你的_TELEGRAM_CHAT_ID":
+    if not bot_token or not chat_id:
         print("【提示】未配置 Telegram Token 或 Chat ID，跳过自动推送。")
         return False
 
@@ -372,7 +380,9 @@ def send_notification(stock_code: str, report_content: str) -> bool:
     }
 
     try:
-        proxies = {"http": "http://127.0.0.1:7897", "https": "http://127.0.0.1:7897"}
+        proxies = None
+        if proxy_url:
+            proxies = {"http": proxy_url, "https": proxy_url}
         response = requests.post(url, json=payload, proxies=proxies, timeout=10)
         
         if response.status_code == 200:
@@ -456,6 +466,8 @@ def run_stock_agent_job(config: dict):
 
     watchlist = config.get("watchlist", [])
     model_name = rules.get("model_name", "deepseek-v4-pro")
+    tg_config = config.get("tg_config", {})
+    qq_config = config.get("qq_config", {})
     
     print(f"\n⏰ 触发定时任务：开始执行每日量化分析 [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
     
@@ -474,7 +486,7 @@ def run_stock_agent_job(config: dict):
             prediction_results = predict_trend(df_with_indicators)
             
             # 4. 收集财经新闻（内部已包含多大模型调用及今明两日/媒体可信度筛选逻辑）
-            news_context = get_stock_news(target_stock, model_name)
+            news_context = get_stock_news(target_stock, model_name, rules)
             
             latest_row = df_with_indicators.iloc[-1]
             market_date_str = latest_row.name.strftime('%Y-%m-%d') if hasattr(latest_row.name, 'strftime') else str(latest_row.name)
@@ -492,7 +504,7 @@ def run_stock_agent_job(config: dict):
             reflection_context = reflect_on_previous_prediction(target_stock, latest_data_snapshot["Close"])
             
             # 6. 大模型综合撰写大白话报告
-            report = generate_report(target_stock, metrics, latest_data_snapshot, prediction_results, reflection_context, model_name, news_context)
+            report = generate_report(target_stock, metrics, latest_data_snapshot, prediction_results, reflection_context, model_name, news_context, rules)
             
             # 保存本地报告
             if rules.get("save_local_report", True):
@@ -503,13 +515,14 @@ def run_stock_agent_job(config: dict):
                 print(f"💾 本地文件保存成功: {report_filename}")
                 
             # 推送 Telegram
-            # print(f"【6/6】正在将 {target_stock} 的日报推送到 Telegram...")
-            # send_notification(target_stock, report)
+            if tg_config:
+                print(f"【6/6】正在将 {target_stock} 的日报推送到 Telegram...")
+                send_notification(target_stock, report, tg_config)
             
             # 【新增：推送到 QQ 机器人】
-            # qq_config = config.get("qq_config", {})
-            # print(f" 正在将 {target_stock} 的日报推送到 QQ 机器人...")
-            # send_qq_notification(target_stock, report, qq_config)
+            if qq_config:
+                print(f" 正在将 {target_stock} 的日报推送到 QQ 机器人...")
+                send_qq_notification(target_stock, report, qq_config)
 
             # 保存记忆
             save_stock_memory(
