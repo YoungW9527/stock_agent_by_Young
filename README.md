@@ -9,7 +9,7 @@
 ### 1. 克隆仓库
 首先，将代码克隆到本地：
 ```bash
-git clone https://github.com/你的用户名/stock-agent.git
+git clone https://github.com/YoungW9527/stock_agent_by_Young.git
 cd stock-agent
 ```
 
