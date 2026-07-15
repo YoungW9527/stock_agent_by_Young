@@ -26,4 +26,4 @@ stock-agent
 
 ## 配置
 
-请确保在运行目录下存在 `config.json` 文件。
+请将 `config_example.json` 改名为 `config.json` 再开始使用

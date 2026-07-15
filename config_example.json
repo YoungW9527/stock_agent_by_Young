@@ -1,0 +1,27 @@
+{
+    "watchlist": [
+        "600386.SS",
+        "000702.SZ"
+    ],
+    "schedule_time": "06:00",
+    "rules": {
+        "model_name": "deepseek-v4-flash",
+        "skip_weekends": true,
+        "save_local_report": true,
+        "llm_api_key": " api ",
+        "llm_base_url": "https://api.deepseek.com"
+    },
+    "tg_config": {
+        "enabled": false,
+        "bot_token": " ",
+        "chat_id": " ",
+        "proxy": "http://127.0.0.1:7897"
+    },
+    "qq_config": {
+        "enabled": true,
+        "api_url": "http://127.0.0.1:3002",
+        "group_id": "",
+        "user_id": "",
+        "access_token": ""
+    }
+}
