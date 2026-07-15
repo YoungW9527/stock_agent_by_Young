@@ -515,12 +515,12 @@ def run_stock_agent_job(config: dict):
                 print(f"💾 本地文件保存成功: {report_filename}")
                 
             # 推送 Telegram
-            if tg_config:
+            if tg_config.get("enabled", False):
                 print(f"【6/6】正在将 {target_stock} 的日报推送到 Telegram...")
                 send_notification(target_stock, report, tg_config)
             
             # 【新增：推送到 QQ 机器人】
-            if qq_config:
+            if qq_config.get("enabled", False):
                 print(f" 正在将 {target_stock} 的日报推送到 QQ 机器人...")
                 send_qq_notification(target_stock, report, qq_config)
 
